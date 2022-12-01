@@ -10,18 +10,15 @@ export class Table<T extends TableSchema> {
     constructor(private schema: T, private rows: TableRow<T>[] = []) {}
 
     get header() {
-        let res = ''
-        for (let column of Object.keys(this.schema)) {
-            res += column
-            res += ','
-        }
-        res += '\n'
-        for (let column of Object.keys(this.schema)) {
-            res += this.schema[column].name
-            res += ','
-        }
-        res += '\n'
-        return res
+        let res = Object.keys(this.schema).join(',')
+        return (
+            res +
+            '\n' +
+            Object.keys(this.schema)
+                .map((k) => this.schema[k].name)
+                .join(',') +
+            '\n'
+        )
     }
 
     append(rows: TableRow<T> | TableRow<T>[]): void {
@@ -34,13 +31,15 @@ export class Table<T extends TableSchema> {
 
     serialize(options?: unknown) {
         let res = this.header
-        for (let row of this.rows) {
-            for (let column of Object.keys(this.schema)) {
-                res += this.schema[column].serialize(row[column])
-                res += ','
-            }
-            res += '\n'
-        }
-        return res.slice(0, res.length - 1)
+        return (
+            res +
+            this.rows
+                .map((row) =>
+                    Object.entries(this.schema)
+                        .map(([column, type]) => type.serialize(row[column]))
+                        .join(',')
+                )
+                .join('\n')
+        )
     }
 }
