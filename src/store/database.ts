@@ -1,27 +1,28 @@
-import {createOrmConfig} from '@subsquid/typeorm-config'
-import {assertNotNull} from '@subsquid/util-internal'
 import assert from 'assert'
 import fs from 'fs'
 import path from 'path'
-import {Store, TableManager} from './store'
-import {Table, TableData, TableSchema} from './table'
+import {Store} from './store'
+import {Table, TableBuilder, TableManager} from './table'
 import {types} from './types'
 
-export interface CsvDatabaseOptions<T extends Record<string, TableSchema>> {
+export interface CsvDatabaseOptions {
     path?: string
     encoding?: BufferEncoding
-    tables: T
+    extension?: string
+    tables: Table<any>[]
 }
 
-export class CsvDatabase<T extends Record<string, TableSchema>> {
-    protected path: string
-    protected encoding: BufferEncoding
-    protected lastCommitted = -1
-    protected tables: Record<string, TableSchema>
+export class CsvDatabase {
+    private path: string
+    private encoding: BufferEncoding
+    private extension: string
+    private lastCommitted = -1
+    private tables: Table<any>[]
 
-    constructor(protected options?: CsvDatabaseOptions<T>) {
+    constructor(private options?: CsvDatabaseOptions) {
         this.path = path.resolve(options?.path ? options.path : './data')
-        this.tables = options?.tables || {}
+        this.tables = options?.tables || []
+        this.extension = options?.extension || 'csv'
         this.encoding = options?.encoding || 'utf-8'
     }
 
@@ -32,10 +33,7 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
             assert(rows.length == 3)
             return Number(rows[2])
         } else {
-            let statusTable = new Table({
-                height: types.Int,
-            })
-            statusTable.append({height: -1})
+            let statusTable = new TableBuilder({height: types.Int}, [{height: -1}])
 
             if (!fs.existsSync(this.path)) {
                 fs.mkdirSync(this.path, {recursive: true})
@@ -50,7 +48,7 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
         this.lastCommitted = -1
     }
 
-    async transact(from: number, to: number, cb: (store: Store<T>) => Promise<void>): Promise<void> {
+    async transact(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void> {
         let retries = 3
         while (true) {
             try {
@@ -65,7 +63,7 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
         }
     }
 
-    protected async runTransaction(from: number, to: number, cb: (store: Store<T>) => Promise<void>): Promise<void> {
+    private async runTransaction(from: number, to: number, cb: (store: Store) => Promise<void>): Promise<void> {
         let tm = new TableManager(this.tables)
         let open = true
 
@@ -87,9 +85,11 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
             fs.mkdirSync(folder, {recursive: true})
         }
 
-        for (let tableName of Object.keys(this.tables)) {
-            let table = assertNotNull(tm.getTable(tableName))
-            fs.writeFileSync(path.join(folder, `${tableName}.csv`), table.serialize(), {encoding: this.encoding})
+        for (let table of this.tables) {
+            let tablebuilder = tm.getTableBuilder(table.name)
+            fs.writeFileSync(path.join(folder, `${table.name}.${this.extension}`), tablebuilder.serialize(), {
+                encoding: this.encoding,
+            })
         }
 
         open = false
@@ -100,14 +100,9 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
         await this.updateHeight(height, height)
     }
 
-    protected async updateHeight(from: number, to: number): Promise<void> {
-        let dir = path.join(this.path, 'status.csv')
-        let statusTable = new Table(
-            {
-                height: types.Int,
-            },
-            [{height: to}]
-        )
+    private async updateHeight(from: number, to: number): Promise<void> {
+        let dir = path.join(this.path, `status.${this.extension}`)
+        let statusTable = new TableBuilder({height: types.Int}, [{height: to}])
 
         if (!fs.existsSync(this.path)) {
             fs.mkdirSync(this.path, {recursive: true})

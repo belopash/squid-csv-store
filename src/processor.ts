@@ -1,17 +1,12 @@
-import {lookupArchive} from '@subsquid/archive-registry'
 import * as ss58 from '@subsquid/ss58'
+import {lookupArchive} from '@subsquid/archive-registry'
 import {BatchContext, BatchProcessorItem, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
-import {In} from 'typeorm'
-import {Account, Transfer} from './model'
 import {CsvDatabase, Store, types} from './store'
 import {BalancesTransferEvent} from './types/events'
+import {Extrinsics, Transfers} from './tables'
 
 const processor = new SubstrateBatchProcessor()
     .setDataSource({
-        // Lookup archive by the network name in the Subsquid registry
-        //archive: lookupArchive("kusama", {release: "FireSquid"})
-
-        // Use archive created by archive/docker-compose.yml
         archive: lookupArchive('kusama', {release: 'FireSquid'}),
     })
     .addEvent('Balances.Transfer', {
@@ -26,36 +21,21 @@ const processor = new SubstrateBatchProcessor()
     } as const)
 
 let db = new CsvDatabase({
-    tables: {
-        transfer: {
-            blockNumber: types.Int,
-            timestamp: types.DateTime,
-            extrinsicHash: types.String,
-            from: types.String,
-            to: types.String,
-            amount: types.BigInt,
-        },
-        extrinsic: {
-            block: types.Int,
-            timestamp: types.DateTime,
-            hash: types.String,
-            signer: types.String,
-        },
-    },
+    tables: [Transfers, Extrinsics],
 })
 
 processor.run(db, async (ctx) => {
     let transfersData = getTransfers(ctx)
 
     for (let t of transfersData) {
-        ctx.store.write('transfer', t)
+        ctx.store.write(Transfers, t)
     }
 })
 
 interface TransferEvent {
     blockNumber: number
     timestamp: Date
-    extrinsicHash: string
+    extrinsicHash?: string
     from: string
     to: string
     amount: bigint
@@ -86,7 +66,7 @@ function getTransfers(ctx: Ctx): TransferEvent[] {
                 transfers.push({
                     blockNumber: block.header.height,
                     timestamp: new Date(block.header.timestamp),
-                    extrinsicHash: item.event.extrinsic?.hash || 'null',
+                    extrinsicHash: item.event.extrinsic?.hash,
                     from: ss58.codec('kusama').encode(rec.from),
                     to: ss58.codec('kusama').encode(rec.to),
                     amount: rec.amount,

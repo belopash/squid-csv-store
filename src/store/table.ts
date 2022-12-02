@@ -1,15 +1,30 @@
+import {assertNotNull} from '@subsquid/substrate-processor'
 import {Type} from './types'
 
-export type TableSchema = Record<string, Type<any>>
+export type RecordField<T> = Type<T> | {name: string; type: Type<T>}
 
-export type TableData<TableSchema> = {name: string; shema: TableSchema}
+export type TableHeader = {
+    [k: string]: RecordField<any>
+}
 
-export type TableRow<T extends TableSchema> = {[k in keyof T]: T[k] extends Type<infer R> ? R : never}
+export class Table<T extends TableHeader> {
+    constructor(readonly name: string, readonly header: T) {}
+}
 
-export class Table<T extends TableSchema> {
-    constructor(private schema: T, private rows: TableRow<T>[] = []) {}
+type ExcludeOptionKeys<T> = {
+    [p in keyof T]: T[p] extends RecordField<infer R> ? (null extends R ? never : T[p]) : never
+}[keyof T]
 
-    get header() {
+export type TableRecord<T extends TableHeader> = {
+    [k in keyof Pick<T, ExcludeOptionKeys<T>>]: T[k] extends RecordField<infer R> ? R : never
+} & {
+    [k in keyof Omit<T, ExcludeOptionKeys<T>>]?: T[k] extends RecordField<infer R> ? R : never
+}
+
+export class TableBuilder<T extends TableHeader> {
+    constructor(private schema: TableHeader, private rows: TableRecord<T>[] = []) {}
+
+    private get header() {
         let res = Object.keys(this.schema).join(',')
         return (
             res +
@@ -21,7 +36,7 @@ export class Table<T extends TableSchema> {
         )
     }
 
-    append(rows: TableRow<T> | TableRow<T>[]): void {
+    append(rows: TableRecord<T> | TableRecord<T>[]): void {
         if (Array.isArray(rows)) {
             this.rows.push(...rows)
         } else {
@@ -29,17 +44,32 @@ export class Table<T extends TableSchema> {
         }
     }
 
-    serialize(options?: unknown) {
+    serialize(options?: unknown): string {
         let res = this.header
         return (
             res +
             this.rows
                 .map((row) =>
                     Object.entries(this.schema)
-                        .map(([column, type]) => type.serialize(row[column]))
+                        .map(([field, fieldData]) => {
+                            let type = fieldData instanceof Type ? fieldData : fieldData.type
+                            return type.serialize(row[field as keyof typeof row])
+                        })
                         .join(',')
                 )
                 .join('\n')
         )
+    }
+}
+
+export class TableManager {
+    private tables: Map<string, TableBuilder<any>>
+
+    constructor(tables: Table<any>[]) {
+        this.tables = new Map(tables.map((t) => [t.name, new TableBuilder(t.header)]))
+    }
+
+    getTableBuilder<T extends TableHeader>(name: string): TableBuilder<T> {
+        return assertNotNull(this.tables.get(name), `Table ${name} does not exist`)
     }
 }
