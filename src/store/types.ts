@@ -64,6 +64,15 @@ let DateTime: Type<Date> = {
     },
 }
 
+let Array = <T>(item: Type<T>): Type<T[]> => {
+    return {
+        name: `array<${item.name}>`,
+        serialize(value: T[], seperator = '|') {
+            return value.map((i) => item.serialize(i)).join(seperator)
+        },
+    }
+}
+
 export let types = {
     String,
     Int,
@@ -73,4 +82,5 @@ export let types = {
     Bytes,
     DateTime,
     Boolean,
+    Array,
 }

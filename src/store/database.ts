@@ -5,7 +5,6 @@ import fs from 'fs'
 import path from 'path'
 import {Store, TableManager} from './store'
 import {Table, TableData, TableSchema} from './table'
-// import {createTransaction, Tx} from './tx'
 import {types} from './types'
 
 export interface CsvDatabaseOptions<T extends Record<string, TableSchema>> {
@@ -29,10 +28,7 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
     async connect(): Promise<number> {
         let dir = path.join(this.path, 'status.csv')
         if (fs.existsSync(dir)) {
-            let rows = fs
-                .readFileSync(dir)
-                .toString(this.encoding)
-                .split('\n')
+            let rows = fs.readFileSync(dir).toString(this.encoding).split('\n')
             assert(rows.length == 3)
             return Number(rows[2])
         } else {
@@ -45,7 +41,7 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
                 fs.mkdirSync(this.path, {recursive: true})
             }
 
-            fs.writeFileSync(dir, statusTable.serialize(), {flag: 'w', encoding: this.encoding})
+            fs.writeFileSync(dir, statusTable.serialize(), {encoding: this.encoding})
             return -1
         }
     }
@@ -93,7 +89,7 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
 
         for (let tableName of Object.keys(this.tables)) {
             let table = assertNotNull(tm.getTable(tableName))
-            fs.writeFileSync(path.join(folder, `${tableName}.csv`), table.serialize(), {flag: 'w', encoding: this.encoding})
+            fs.writeFileSync(path.join(folder, `${tableName}.csv`), table.serialize(), {encoding: this.encoding})
         }
 
         open = false
@@ -106,10 +102,12 @@ export class CsvDatabase<T extends Record<string, TableSchema>> {
 
     protected async updateHeight(from: number, to: number): Promise<void> {
         let dir = path.join(this.path, 'status.csv')
-        let statusTable = new Table({
-            height: types.Int,
-        })
-        statusTable.append({height: to})
+        let statusTable = new Table(
+            {
+                height: types.Int,
+            },
+            [{height: to}]
+        )
 
         if (!fs.existsSync(this.path)) {
             fs.mkdirSync(this.path, {recursive: true})
