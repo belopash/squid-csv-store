@@ -18,6 +18,7 @@
     "@subsquid/ss58": "0.1.2",
     "@subsquid/substrate-processor": "2.0.2",
     "@subsquid/util-internal-hex": "^0.0.1",
+    "@subsquid/util-internal-json": "^0.2.0",
     "dotenv": "^10.0.0"
   },
   "devDependencies": {

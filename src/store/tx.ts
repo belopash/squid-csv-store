@@ -1,42 +1,72 @@
 // import type {Connection, EntityManager} from "typeorm"
 // import type {IsolationLevel} from "./database"
 
+import path from 'path'
+import fs from 'fs'
 
-// export interface Tx {
-//     em: EntityManager
-//     commit(): Promise<void>
-//     rollback(): Promise<void>
-// }
+export class Transaction {
+    private tempPath: string
+    private path: string
 
+    constructor(dir: string) {
+        this.path = path.resolve(dir)
 
-// export function createTransaction(con: Connection, isolationLevel: IsolationLevel): Promise<Tx> {
-//     return new Promise((resolve, reject) => {
-//         let done: Promise<void> = con.transaction(isolationLevel, em => {
-//             return new Promise((commit, rollback) => {
-//                 resolve({
-//                     em,
-//                     commit() {
-//                         commit()
-//                         return done
-//                     },
-//                     rollback() {
-//                         rollback(ROLLBACK_ERROR)
-//                         return done.catch(err => {
-//                             if (err !== ROLLBACK_ERROR) {
-//                                 throw err
-//                             }
-//                         })
-//                     }
-//                 })
-//             })
-//         })
-//         done.catch(err => {
-//             if (err !== ROLLBACK_ERROR) {
-//                 reject(err)
-//             }
-//         })
-//     })
-// }
+        let tempDir = `${path.basename(this.path)}-temp-${Date.now()}`
+        this.tempPath = path.join(path.dirname(this.path), tempDir)
 
+        fs.mkdirSync(this.tempPath, {recursive: true})
+    }
 
-// const ROLLBACK_ERROR = new Error('rollback')
+    mkdir(name: string) {
+        try {
+            fs.mkdirSync(path.join(this.tempPath, name), {recursive: true})
+        } catch (error) {
+            this.rollback(error)
+        }
+    }
+
+    writeFile(name: string, content: string) {
+        try {
+            const filePath = path.join(this.tempPath, name)
+            fs.writeFileSync(filePath, content)
+        } catch (error: any) {
+            this.rollback(error)
+        }
+    }
+
+    commit() {
+        try {
+            this.mergeDirs(this.tempPath, this.path)
+            fs.rmSync(this.tempPath, {recursive: true, force: true})
+        } catch (error) {
+            this.rollback(error)
+        }
+    }
+
+    rollback(error: any) {
+        fs.rmSync(this.tempPath, {recursive: true, force: true})
+        throw error
+    }
+
+    mergeDirs(src: string, dst: string) {
+        if (!fs.existsSync(path.resolve(dst))) {
+            fs.mkdirSync(dst)
+        }
+
+        const files = fs.readdirSync(src)
+        for (let file of files) {
+            const srcFile = path.resolve(path.join(src, file))
+            const dstFile = path.resolve(path.join(dst, file))
+
+            const stats = fs.lstatSync(srcFile)
+            if (stats.isDirectory()) {
+                this.mergeDirs(srcFile, dstFile)
+            } else {
+                if (fs.existsSync(dstFile)) {
+                    fs.rmSync(dstFile)
+                }
+                fs.renameSync(srcFile, dstFile)
+            }
+        }
+    }
+}

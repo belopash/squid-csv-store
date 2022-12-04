@@ -1,7 +1,8 @@
 import {assertNotNull} from '@subsquid/substrate-processor'
+import assert from 'assert'
 import {Type} from './types'
 
-export type RecordField<T> = Type<T> | {name: string; type: Type<T>}
+export type RecordField<T> = Type<T>
 
 export type TableHeader = {
     [k: string]: RecordField<any>
@@ -51,13 +52,10 @@ export class TableBuilder<T extends TableHeader> {
             this.rows
                 .map((row) =>
                     Object.entries(this.schema)
-                        .map(([field, fieldData]) => {
-                            let type = fieldData instanceof Type ? fieldData : fieldData.type
-                            return type.serialize(row[field as keyof typeof row])
-                        })
+                        .map(([field, fieldData]) => fieldData.serialize(row[field as keyof typeof row]))
                         .join(',')
                 )
-                .join('\n')
+                .join('\r\n')
         )
     }
 }

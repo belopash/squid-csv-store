@@ -3,6 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import {Store} from './store'
 import {Table, TableBuilder, TableManager} from './table'
+import {Transaction} from './tx'
 import {types} from './types'
 
 export interface CsvDatabaseOptions {
@@ -19,7 +20,7 @@ export class CsvDatabase {
     private lastCommitted = -1
     private tables: Table<any>[]
 
-    constructor(private options?: CsvDatabaseOptions) {
+    constructor(options?: CsvDatabaseOptions) {
         this.path = path.resolve(options?.path ? options.path : './data')
         this.tables = options?.tables || []
         this.extension = options?.extension || 'csv'
@@ -33,13 +34,9 @@ export class CsvDatabase {
             assert(rows.length == 3)
             return Number(rows[2])
         } else {
-            let statusTable = new TableBuilder({height: types.Int}, [{height: -1}])
-
-            if (!fs.existsSync(this.path)) {
-                fs.mkdirSync(this.path, {recursive: true})
-            }
-
-            fs.writeFileSync(dir, statusTable.serialize(), {encoding: this.encoding})
+            let tx = new Transaction(this.path)
+            this.updateHeight(tx, -1, -1)
+            tx.commit()
             return -1
         }
     }
@@ -54,7 +51,7 @@ export class CsvDatabase {
             try {
                 return await this.runTransaction(from, to, cb)
             } catch (e: any) {
-                if (e.code == '40001' && retries) {
+                if (retries) {
                     retries -= 1
                 } else {
                     throw e
@@ -79,35 +76,28 @@ export class CsvDatabase {
             throw e
         }
 
-        let folder = path.join(this.path, `${from}-${to}`)
-
-        if (!fs.existsSync(folder)) {
-            fs.mkdirSync(folder, {recursive: true})
-        }
-
+        let tx = new Transaction(this.path)
+        let folder = `${from}-${to}`
+        tx.mkdir(folder)
         for (let table of this.tables) {
             let tablebuilder = tm.getTableBuilder(table.name)
-            fs.writeFileSync(path.join(folder, `${table.name}.${this.extension}`), tablebuilder.serialize(), {
-                encoding: this.encoding,
-            })
+            tx.writeFile(path.join(folder, `${table.name}.${this.extension}`), tablebuilder.serialize())
         }
-
+        this.updateHeight(tx, from, to)
+        tx.commit()
         open = false
         this.lastCommitted = to
     }
 
     async advance(height: number): Promise<void> {
-        await this.updateHeight(height, height)
+        if (this.lastCommitted == height) return
+        let tx = new Transaction(this.path)
+        this.updateHeight(new Transaction(this.path), height, height)
+        tx.commit()
     }
 
-    private async updateHeight(from: number, to: number): Promise<void> {
-        let dir = path.join(this.path, `status.${this.extension}`)
-        let statusTable = new TableBuilder({height: types.Int}, [{height: to}])
-
-        if (!fs.existsSync(this.path)) {
-            fs.mkdirSync(this.path, {recursive: true})
-        }
-
-        fs.writeFileSync(dir, statusTable.serialize())
+    private updateHeight(tx: Transaction, from: number, to: number): void {
+        let statusTable = new TableBuilder({height: types.int}, [{height: to}])
+        tx.writeFile(`status.${this.extension}`, statusTable.serialize())
     }
 }

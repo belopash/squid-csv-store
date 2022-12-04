@@ -1,17 +1,17 @@
-import {Table, types} from './store'
+import {Nullable, Table, types} from './store'
 
 export const Transfers = new Table('transfers', {
-    blockNumber: {name: 'block', type: types.Int},
-    timestamp: types.DateTime,
-    extrinsicHash: types.Option(types.String),
-    from: types.String,
-    to: types.String,
-    amount: types.BigInt,
+    blockNumber: types.int,
+    timestamp: types.datetime,
+    extrinsicHash: Nullable(types.string),
+    from: types.string,
+    to: types.string,
+    amount: types.bigint,
 })
 
 export const Extrinsics = new Table('extrinsics', {
-    block: types.Int,
-    timestamp: types.DateTime,
-    hash: types.String,
-    signer: types.String,
+    block: types.int,
+    timestamp: types.datetime,
+    hash: types.string,
+    signer: types.string,
 })
