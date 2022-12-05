@@ -1,12 +1,10 @@
-// import type {Connection, EntityManager} from "typeorm"
-// import type {IsolationLevel} from "./database"
-
 import path from 'path'
 import fs from 'fs'
 
 export class Transaction {
     private tempPath: string
     private path: string
+    private fs = fs.promises
 
     constructor(dir: string) {
         this.path = path.resolve(dir)
@@ -17,55 +15,55 @@ export class Transaction {
         fs.mkdirSync(this.tempPath, {recursive: true})
     }
 
-    mkdir(name: string) {
+    async mkdir(name: string) {
         try {
-            fs.mkdirSync(path.join(this.tempPath, name), {recursive: true})
+            await this.fs.mkdir(path.join(this.tempPath, name), {recursive: true})
         } catch (error) {
-            this.rollback(error)
+            await this.rollback(error)
         }
     }
 
-    writeFile(name: string, content: string) {
+    async writeFile(name: string, content: string, options?: {encoding: BufferEncoding}) {
         try {
             const filePath = path.join(this.tempPath, name)
-            fs.writeFileSync(filePath, content)
+            await this.fs.writeFile(filePath, content, options)
         } catch (error: any) {
-            this.rollback(error)
+            await this.rollback(error)
         }
     }
 
-    commit() {
+    async commit() {
         try {
-            this.mergeDirs(this.tempPath, this.path)
-            fs.rmSync(this.tempPath, {recursive: true, force: true})
+            await this.mergeDirs(this.tempPath, this.path)
+            await this.fs.rm(this.tempPath, {recursive: true, force: true})
         } catch (error) {
             this.rollback(error)
         }
     }
 
-    rollback(error: any) {
-        fs.rmSync(this.tempPath, {recursive: true, force: true})
+    async rollback(error: any) {
+        await this.fs.rm(this.tempPath, {recursive: true, force: true})
         throw error
     }
 
-    mergeDirs(src: string, dst: string) {
+    private async mergeDirs(src: string, dst: string) {
         if (!fs.existsSync(path.resolve(dst))) {
-            fs.mkdirSync(dst)
+            await this.fs.mkdir(dst)
         }
 
-        const files = fs.readdirSync(src)
+        const files = await this.fs.readdir(src)
         for (let file of files) {
             const srcFile = path.resolve(path.join(src, file))
             const dstFile = path.resolve(path.join(dst, file))
 
-            const stats = fs.lstatSync(srcFile)
+            const stats = await this.fs.lstat(srcFile)
             if (stats.isDirectory()) {
-                this.mergeDirs(srcFile, dstFile)
+                await this.mergeDirs(srcFile, dstFile)
             } else {
                 if (fs.existsSync(dstFile)) {
-                    fs.rmSync(dstFile)
+                    await this.fs.rm(dstFile)
                 }
-                fs.renameSync(srcFile, dstFile)
+                await this.fs.rename(srcFile, dstFile)
             }
         }
     }

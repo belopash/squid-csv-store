@@ -1,7 +1,7 @@
 import * as ss58 from '@subsquid/ss58'
 import {lookupArchive} from '@subsquid/archive-registry'
 import {BatchContext, BatchProcessorItem, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
-import {CsvDatabase, Store, types} from './store'
+import {CsvDatabase} from './store'
 import {BalancesTransferEvent} from './types/events'
 import {Extrinsics, Transfers} from './tables'
 
@@ -20,9 +20,7 @@ const processor = new SubstrateBatchProcessor()
         },
     } as const)
 
-let db = new CsvDatabase({
-    tables: [Transfers, Extrinsics],
-})
+let db = new CsvDatabase([Transfers, Extrinsics])
 
 processor.run(db, async (ctx) => {
     let transfersData = getTransfers(ctx)

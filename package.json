@@ -19,7 +19,8 @@
     "@subsquid/substrate-processor": "2.0.2",
     "@subsquid/util-internal-hex": "^0.0.1",
     "@subsquid/util-internal-json": "^0.2.0",
-    "dotenv": "^10.0.0"
+    "dotenv": "^10.0.0",
+    "s3fs": "^2.5.0"
   },
   "devDependencies": {
     "@subsquid/substrate-metadata-explorer": "1.0.9",
