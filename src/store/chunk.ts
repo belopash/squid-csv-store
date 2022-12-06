@@ -22,6 +22,6 @@ export class Chunk {
     }
 
     get name() {
-        return `${this.from}-${this.to}`
+        return `${this.from.toString().padStart(10, '0')}-${this.to.toString().padStart(10, '0')}`
     }
 }

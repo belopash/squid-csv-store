@@ -1,6 +1,6 @@
 import * as ss58 from '@subsquid/ss58'
 import {lookupArchive} from '@subsquid/archive-registry'
-import {BatchContext, BatchProcessorItem, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
+import {assertNotNull, BatchContext, BatchProcessorItem, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
 import {CsvDatabase} from './store'
 import {BalancesTransferEvent} from './types/events'
 import {Extrinsics, Transfers} from './tables'
@@ -20,7 +20,16 @@ const processor = new SubstrateBatchProcessor()
         },
     } as const)
 
-let db = new CsvDatabase([Transfers, Extrinsics])
+let db = new CsvDatabase([Transfers, Extrinsics], {
+    dest: `s3://${process.env.S3_BUCKET}/data`,
+    chunkSize: 10,
+    fsOptions: {
+        endpoint: assertNotNull(process.env.S3_ENDPOINT),
+        region: assertNotNull(process.env.S3_REGION),
+        accessKey: assertNotNull(process.env.S3_ACCESS_KEY),
+        secretKey: assertNotNull(process.env.S3_SECRET_KEY),
+    }
+})
 
 processor.run(db, async (ctx) => {
     let transfersData = getTransfers(ctx)

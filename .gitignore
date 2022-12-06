@@ -8,3 +8,5 @@
 /.idea
 
 /data
+
+.env.s3

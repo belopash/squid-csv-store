@@ -1,24 +1,23 @@
-import {assertNotNull} from '@subsquid/substrate-processor'
+import {S3Client} from '@aws-sdk/client-s3'
 import assert from 'assert'
-import fs from 'fs'
-import path from 'path'
 import {Chunk} from './chunk'
 import {Dialect, dialects} from './dialect'
+import {createFS, FS, FSOptions, LocalFS, S3Fs} from './fs'
 import {Store} from './store'
 import {Table, TableBuilder, TableHeader, TableManager} from './table'
-import {Transaction} from './tx'
 import {types} from './types'
 
 export interface CsvDatabaseOptions {
-    path?: string
+    dest?: string
     encoding?: BufferEncoding
     extension?: string
     dialect?: Dialect
     chunkSize?: number
+    fsOptions?: FSOptions
 }
 
 export class CsvDatabase {
-    private path: string
+    // private path: string
     private encoding: BufferEncoding
     private extension: string
     private chunkSize: number
@@ -26,37 +25,26 @@ export class CsvDatabase {
     private lastCommitted = -1
 
     private chunk: Chunk | undefined
-
-    // private get tableManager() {
-    //     this._tableManager =
-    //         this._tableManager || new Map(this.tables.map((t) => [t.name, new TableBuilder(t.header, this.dialect)]))
-    //     return this._tableManager
-    // }
-
-    // private set tableManager() {
-    //     this._tableManager =
-    //         this._tableManager || new Map(this.tables.map((t) => [t.name, new TableBuilder(t.header, this.dialect)]))
-    //     return this._tableManager
-    // }
+    private fs: FS
 
     constructor(private tables: Table<any>[], options?: CsvDatabaseOptions) {
-        this.path = path.resolve(options?.path ? options.path : './data')
         this.extension = options?.extension || 'csv'
         this.encoding = options?.encoding || 'utf-8'
         this.dialect = options?.dialect || dialects.excel
         this.chunkSize = options?.chunkSize || 20
+        this.fs = createFS(options?.dest || './data', options?.fsOptions)
     }
 
     async connect(): Promise<number> {
-        let dir = path.join(this.path, 'status.csv')
-        if (fs.existsSync(dir)) {
-            let rows = fs.readFileSync(dir).toString(this.encoding).split(dialects.excel.lineTerminator)
+        if (await this.fs.exist('status.csv')) {
+            let rows = await this.fs
+                .readFile('status.csv', this.encoding)
+                .then((data) => data.split(dialects.excel.lineTerminator))
             assert(rows.length == 3)
             return Number(rows[2])
         } else {
-            let tx = new Transaction(this.path)
-            this.updateHeight(tx, -1, -1)
-            tx.commit()
+            let statusTable = new TableBuilder({height: types.int}, dialects.excel, [{height: -1}])
+            await this.fs.writeFile(`status.${this.extension}`, statusTable.data, this.encoding)
             return -1
         }
     }
@@ -108,31 +96,25 @@ export class CsvDatabase {
     async advance(height: number): Promise<void> {
         if (!this.chunk || this.chunk.totalSize < this.chunkSize * 1024 * 1024) return
 
-        let tx = new Transaction(this.path)
-
-        if (height > this.lastCommitted) this.chunk.changeRange({to: height})
-        tx.mkdir(this.chunk.name)
-
-        for (let table of this.tables) {
-            let tablebuilder = this.chunk.getTableBuilder(table.name)
-            let fileName = path.join(this.chunk.name, `${table.name}.${this.extension}`)
-            tx.writeFile(fileName, tablebuilder.data, {encoding: this.encoding})
+        if (height > this.lastCommitted) {
+            this.chunk.changeRange({to: height})
+            this.lastCommitted = height
         }
 
+        let tx = this.fs.transact(this.chunk.name)
+        for (let table of this.tables) {
+            let tablebuilder = this.chunk.getTableBuilder(table.name)
+            await tx.writeFile(`${table.name}.${this.extension}`, tablebuilder.data, this.encoding)
+        }
+        await tx.commit()
+
         let statusTable = new TableBuilder({height: types.int}, dialects.excel, [{height}])
-        tx.writeFile(`status.${this.extension}`, statusTable.data)
+        await this.fs.writeFile(`status.csv`, statusTable.data, this.encoding)
 
-        tx.commit()
-
-        this.lastCommitted = height
+        this.chunk = undefined
     }
 
     private createChunk(from: number, to: number) {
         return new Chunk(from, to, new Map(this.tables.map((t) => [t.name, new TableBuilder(t.header, this.dialect)])))
-    }
-
-    private updateHeight(tx: Transaction, from: number, to: number): void {
-        let statusTable = new TableBuilder({height: types.int}, dialects.excel, [{height: to}])
-        tx.writeFile(`status.${this.extension}`, statusTable.data)
     }
 }
