@@ -1,4 +1,4 @@
-import {Nullable, Table, types} from './store'
+import {Nullable, Table, types} from '@subsquid/csv-store'
 
 export const Transfers = new Table('transfers', {
     blockNumber: types.int,

@@ -1,7 +1,7 @@
 import * as ss58 from '@subsquid/ss58'
 import {lookupArchive} from '@subsquid/archive-registry'
 import {assertNotNull, BatchContext, BatchProcessorItem, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
-import {CsvDatabase} from './store'
+import {CsvDatabase} from '@subsquid/csv-store'
 import {BalancesTransferEvent} from './types/events'
 import {Extrinsics, Transfers} from './tables'
 
