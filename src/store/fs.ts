@@ -119,7 +119,7 @@ export function createFS(dest: string, fsOptions?: FSOptions) {
     if (!url) {
         return new LocalFS(dest)
     } else if (url.protocol === 's3:') {
-        assert(fsOptions)
+        assert(fsOptions, 'Missing options for s3 destination')
         let s3client = new S3Client({
             region: fsOptions.region,
             endpoint: fsOptions.endpoint,
@@ -130,7 +130,7 @@ export function createFS(dest: string, fsOptions?: FSOptions) {
         })
         return new S3Fs(url.pathname.slice(1), s3client, url.hostname)
     } else {
-        throw new Error()
+        throw new Error(`Unexpected destination - ${dest}`)
     }
 }
 
