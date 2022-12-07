@@ -23,70 +23,39 @@ export type TableRecord<T extends TableHeader> = {
 }
 
 export class TableBuilder<T extends TableHeader> {
-    private _data: string = ''
+    private records: string[] = []
 
-    constructor(private schema: TableHeader, private dialect: Dialect, private records: TableRecord<T>[] = []) {
-        if (dialect.header) {
-            this._data += Object.keys(this.schema).join(',') + this.dialect.lineTerminator
-            this._data +=
-                Object.values(this.schema)
+    constructor(private header: TableHeader, private dialect: Dialect, records: TableRecord<T>[] = []) {
+        if (this.dialect.header) {
+            let serializedHeader = Object.keys(this.header).join(this.dialect.delimiter) + this.dialect.lineTerminator
+            let serializedTypes =
+                Object.values(this.header)
                     .map((t) => t.name)
                     .join(this.dialect.delimiter) + this.dialect.lineTerminator
+            this.records.push(serializedHeader, serializedTypes)
         }
+        this.append(records)
     }
 
-    get data(): string {
-        if (this.records.length > 0) {
-            this._data += this.records
-                .map((record) =>
-                    Object.entries(this.schema)
-                        .map(([field, fieldData]) =>
-                            fieldData.serialize(record[field as keyof typeof record], this.dialect)
-                        )
-                        .join(this.dialect.delimiter)
-                )
-                .join(this.dialect.lineTerminator)
-            this.records = []
-        }
-        return this._data
+    getSize(encoding: BufferEncoding) {
+        return this.records.reduce((size, record) => size + Buffer.byteLength(record, encoding), 0)
+    }
+
+    getTable() {
+        return this.records.join('')
     }
 
     append(records: TableRecord<T> | TableRecord<T>[]): void {
-        if (Array.isArray(records)) {
-            this.records.push(...records)
-        } else {
-            this.records.push(records)
+        records = Array.isArray(records) ? records : [records]
+        for (let record of records) {
+            let serializedRecord = this.serializeRecord(record) + this.dialect.lineTerminator
+            this.records.push(serializedRecord)
         }
     }
 
-    clear() {
-        this._data = ''
-        if (this.dialect.header) {
-            this._data += Object.keys(this.schema).join(',') + this.dialect.lineTerminator
-            this._data +=
-                Object.values(this.schema)
-                    .map((t) => t.name)
-                    .join(this.dialect.delimiter) + this.dialect.lineTerminator
-        }
-    }
-}
-
-export class TableManager {
-    private tables: Map<string, TableBuilder<any>>
-
-    constructor(tables: Table<any>[], dialect: Dialect) {
-        this.tables = new Map(tables.map((t) => [t.name, new TableBuilder(t.header, dialect)]))
-    }
-
-    getTableBuilder<T extends TableHeader>(name: string): TableBuilder<T> {
-        return assertNotNull(this.tables.get(name), `Table ${name} does not exist`)
-    }
-
-    get totalSize() {
-        let total = 0
-        for (let table of this.tables.values()) {
-            total += Buffer.byteLength(table.data)
-        }
-        return total
+    private serializeRecord(record: TableRecord<T>) {
+        return Object.entries(this.header)
+            .map(([field, fieldData]) => fieldData.serialize(record[field as keyof typeof record], this.dialect))
+            .join(this.dialect.delimiter)
     }
 }

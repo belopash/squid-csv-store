@@ -13,10 +13,10 @@ export class Chunk {
         if (range.to) this.to = range.to
     }
 
-    get totalSize() {
+    getSize(encoding: BufferEncoding) {
         let total = 0
         for (let table of this.tables.values()) {
-            total += Buffer.byteLength(table.data)
+            total += table.getSize(encoding)
         }
         return total
     }

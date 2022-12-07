@@ -105,7 +105,7 @@ export let types = {
     float: FloatType,
     bigint: BigIntType,
     bigdecimal: BigDecimalType,
-    butes: BytesType,
+    bytes: BytesType,
     datetime: DateTimeType,
     boolean: BooleanType,
 }
