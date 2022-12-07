@@ -3,7 +3,6 @@ import assert from 'assert'
 import fs from 'fs/promises'
 import {existsSync} from 'fs'
 import path from 'path'
-import {assertNotNull} from '@subsquid/substrate-processor'
 
 export abstract class FS {
     async exist(name: string): Promise<boolean> {
@@ -18,15 +17,9 @@ export abstract class FS {
         throw new Error('Method not implemented.')
     }
 
-    transact(dir: string): FSTransaction {
+    async transact(dir: string, f: (fs: FS) => Promise<void>): Promise<void> {
         throw new Error('Method not implemented.')
     }
-}
-
-export interface FSTransaction {
-    writeFile(path: string, data: string, encoding: BufferEncoding): Promise<void>
-    commit(): Promise<void>
-    rollback(e: any): Promise<void>
 }
 
 export class LocalFS extends FS {
@@ -48,50 +41,18 @@ export class LocalFS extends FS {
         return fs.writeFile(absPath, data, encoding)
     }
 
-    transact(dir: string): LocalFSTRansaction {
-        return new LocalFSTRansaction(path.join(this.dir, dir))
-    }
-}
-
-export class LocalFSTRansaction implements FSTransaction {
-    private tempDir: string
-    private open = true
-
-    constructor(private dir: string) {
-        let tempName = `${path.basename(this.dir)}-temp-${Date.now()}`
-        this.tempDir = path.join(path.dirname(this.dir), tempName)
-    }
-
-    async writeFile(name: string, data: string, encoding: BufferEncoding): Promise<void> {
-        this._check()
+    async transact(dir: string, f: (fs: LocalFS) => Promise<void>) {
+        let absPath = path.join(this.dir, dir)
+        let tempName = `${path.basename(absPath)}-temp-${Date.now()}`
+        let tempDir = path.join(path.dirname(absPath), tempName)
+        let txFs = new LocalFS(tempDir)
         try {
-            let absPath = path.join(this.tempDir, name)
-            await fs.mkdir(path.dirname(absPath), {recursive: true})
-            return fs.writeFile(absPath, data, encoding)
+            await f(txFs)
+            await fs.rename(tempDir, absPath)
         } catch (e) {
-            await this.rollback(e)
+            await fs.rm(tempDir, {recursive: true, force: true})
+            throw e
         }
-    }
-
-    async commit(): Promise<void> {
-        this._check()
-        try {
-            await fs.rename(this.tempDir, this.dir)
-            this.open = false
-        } catch (e) {
-            await this.rollback(e)
-        }
-    }
-
-    async rollback(e: any): Promise<void> {
-        this._check()
-        await fs.rm(this.tempDir, {recursive: true, force: true})
-        this.open = false
-        throw e
-    }
-
-    private _check() {
-        assert(this.open)
     }
 }
 
@@ -134,21 +95,13 @@ export class S3Fs extends FS {
         )
     }
 
-    transact(dir: string): S3FSTRansaction {
-        return new S3FSTRansaction(this.pathJoin(this.dir, dir), this.client, this.bucket)
+    async transact(dir: string, f: (fs: S3Fs) => Promise<void>): Promise<void> {
+        let txFs = new S3Fs(this.pathJoin(this.dir, dir), this.client, this.bucket)
+        await f(txFs) 
     }
 
     private pathJoin(...paths: string[]) {
         return paths.reduce((res, path, i) => res + (path.startsWith('/') || i == 0 ? path : '/' + path), '')
-    }
-}
-
-export class S3FSTRansaction extends S3Fs {
-    async commit(): Promise<void> {
-        return
-    }
-    async rollback(): Promise<void> {
-        return
     }
 }
 

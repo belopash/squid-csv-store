@@ -1,4 +1,5 @@
 import {S3Client} from '@aws-sdk/client-s3'
+import {assertNotNull} from '@subsquid/substrate-processor'
 import assert from 'assert'
 import {Chunk} from './chunk'
 import {Dialect, dialects} from './dialect'
@@ -101,12 +102,12 @@ export class CsvDatabase {
             this.lastCommitted = height
         }
 
-        let tx = this.fs.transact(this.chunk.name)
-        for (let table of this.tables) {
-            let tablebuilder = this.chunk.getTableBuilder(table.name)
-            await tx.writeFile(`${table.name}.${this.extension}`, tablebuilder.data, this.encoding)
-        }
-        await tx.commit()
+        await this.fs.transact(this.chunk.name, async (txFs) => {
+            for (let table of this.tables) {
+                let tablebuilder = assertNotNull(this.chunk).getTableBuilder(table.name)
+                await txFs.writeFile(`${table.name}.${this.extension}`, tablebuilder.data, this.encoding)
+            }
+        })
 
         let statusTable = new TableBuilder({height: types.int}, dialects.excel, [{height}])
         await this.fs.writeFile(`status.csv`, statusTable.data, this.encoding)
