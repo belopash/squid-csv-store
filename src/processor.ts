@@ -23,6 +23,7 @@ const processor = new SubstrateBatchProcessor()
 let db = new CsvDatabase([Transfers, Extrinsics], {
     dest: `s3://${process.env.S3_BUCKET}/data`,
     chunkSize: 10,
+    updateInterval: 10_000,
     fsOptions: {
         endpoint: assertNotNull(process.env.S3_ENDPOINT),
         region: assertNotNull(process.env.S3_REGION),
