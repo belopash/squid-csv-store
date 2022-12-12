@@ -23,7 +23,7 @@ const processor = new SubstrateBatchProcessor()
 let db = new CsvDatabase([Transfers, Extrinsics], {
     dest: `s3://${process.env.S3_BUCKET}/data`,
     chunkSize: 10,
-    updateInterval: 10_000,
+    updateInterval: 50_000,
     fsOptions: {
         endpoint: assertNotNull(process.env.S3_ENDPOINT),
         region: assertNotNull(process.env.S3_REGION),
@@ -34,10 +34,7 @@ let db = new CsvDatabase([Transfers, Extrinsics], {
 
 processor.run(db, async (ctx) => {
     let transfersData = getTransfers(ctx)
-
-    for (let t of transfersData) {
-        ctx.store.write(Transfers, t)
-    }
+    ctx.store.write(Transfers, transfersData)
 })
 
 interface TransferEvent {
