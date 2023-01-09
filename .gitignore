@@ -1,5 +1,6 @@
 /node_modules
 /lib
+/builds
 
 /**Versions.json
 /**Versions.jsonl
@@ -10,3 +11,4 @@
 /data
 
 .env.s3
+pnpm-lock.yaml

@@ -1,6 +1,6 @@
 import * as ss58 from '@subsquid/ss58'
 import {lookupArchive} from '@subsquid/archive-registry'
-import {assertNotNull, BatchContext, BatchProcessorItem, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
+import {decodeHex, SubstrateBatchProcessor} from '@subsquid/substrate-processor'
 import {CsvDatabase} from '@subsquid/csv-store'
 import {BalancesTransferEvent} from './types/events'
 import {Extrinsics, Transfers} from './tables'
@@ -15,43 +15,24 @@ const processor = new SubstrateBatchProcessor()
                 args: true,
                 extrinsic: {
                     hash: true,
+                    call: {
+                        origin: true,
+                    },
                 },
             },
         },
     } as const)
 
-let db = new CsvDatabase([Transfers, Extrinsics], {
-    dest: `s3://${process.env.S3_BUCKET}/data`,
-    chunkSize: 10,
-    updateInterval: 50_000,
-    fsOptions: {
-        endpoint: assertNotNull(process.env.S3_ENDPOINT),
-        region: assertNotNull(process.env.S3_REGION),
-        accessKey: assertNotNull(process.env.S3_ACCESS_KEY),
-        secretKey: assertNotNull(process.env.S3_SECRET_KEY),
-    }
+let db = new CsvDatabase({
+    tables: [Transfers, Extrinsics],
+    dest: `s3://csv-store/test`,
+    chunkSizeMb: 40,
+    syncIntervalBlocks: 1_000,
 })
 
 processor.run(db, async (ctx) => {
-    let transfersData = getTransfers(ctx)
-    ctx.store.write(Transfers, transfersData)
-})
-
-interface TransferEvent {
-    blockNumber: number
-    timestamp: Date
-    extrinsicHash?: string
-    from: string
-    to: string
-    amount: bigint
-}
-
-type Item = BatchProcessorItem<typeof processor>
-type Ctx = BatchContext<unknown, Item>
-
-function getTransfers(ctx: Ctx): TransferEvent[] {
-    let transfers: TransferEvent[] = []
     for (let block of ctx.blocks) {
+        let prevExtrinsic: string | undefined
         for (let item of block.items) {
             if (item.name == 'Balances.Transfer') {
                 let e = new BalancesTransferEvent(ctx, item.event)
@@ -68,7 +49,7 @@ function getTransfers(ctx: Ctx): TransferEvent[] {
                     throw new Error('Unsupported spec')
                 }
 
-                transfers.push({
+                ctx.store.write(Transfers, {
                     blockNumber: block.header.height,
                     timestamp: new Date(block.header.timestamp),
                     extrinsicHash: item.event.extrinsic?.hash,
@@ -76,8 +57,33 @@ function getTransfers(ctx: Ctx): TransferEvent[] {
                     to: ss58.codec('kusama').encode(rec.to),
                     amount: rec.amount,
                 })
+
+                if (item.event.extrinsic && prevExtrinsic != item.event.extrinsic.hash) {
+                    let signer = getOriginAccountId(item.event.extrinsic.call.origin)
+
+                    if (signer) {
+                        ctx.store.write(Extrinsics, {
+                            blockNumber: block.header.height,
+                            timestamp: new Date(block.header.timestamp),
+                            hash: item.event.extrinsic.hash,
+                            signer: ss58.codec('kusama').encode(signer),
+                        })
+                    }
+                }
             }
         }
     }
-    return transfers
+})
+
+export function getOriginAccountId(origin: any) {
+    if (origin && origin.__kind === 'system' && origin.value.__kind === 'Signed') {
+        const id = origin.value.value
+        if (id.__kind === 'Id') {
+            return decodeHex(id.value)
+        } else {
+            return decodeHex(id)
+        }
+    } else {
+        return undefined
+    }
 }

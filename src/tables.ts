@@ -1,17 +1,17 @@
-import {Nullable, Table, types} from '@subsquid/csv-store'
+import {Table, types} from '@subsquid/csv-store'
 
 export const Transfers = new Table('transfers', {
-    blockNumber: types.int,
-    timestamp: types.datetime,
-    extrinsicHash: Nullable(types.string),
+    blockNumber: types.number,
+    timestamp: types.timestamp,
+    extrinsicHash: {type: types.string, nullable: true},
     from: types.string,
     to: types.string,
     amount: types.bigint,
 })
 
 export const Extrinsics = new Table('extrinsics', {
-    block: types.int,
-    timestamp: types.datetime,
+    blockNumber: types.number,
+    timestamp: types.timestamp,
     hash: types.string,
     signer: types.string,
 })
